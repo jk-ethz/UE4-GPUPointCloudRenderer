@@ -1,5 +1,8 @@
 /*************************************************************************************************
-* Written by Valentin Kraft <valentin.kraft@online.de>, http://www.valentinkraft.de, 2018
+* Copyright (C) Valentin Kraft - All Rights Reserved
+* Unauthorized copying of this file, via any medium is strictly prohibited
+* Proprietary and confidential
+* Written by Valentin Kraft <valentin.kraft@online.de>, http://www.valentinkraft.de, February 2018
 **************************************************************************************************/
 
 #include "PointCloudComponent.h"
@@ -50,42 +53,43 @@ class FPointCloudVertexFactory : public FLocalVertexFactory
 {
 public:
 
-	FPointCloudVertexFactory()
-	{}
-
+	FPointCloudVertexFactory(ERHIFeatureLevel::Type InFeatureLevel) : FLocalVertexFactory(InFeatureLevel, "FSplineMeshVertexFactory")
+	{
+		bSupportsManualVertexFetch = false;
+	}
 
 	/** Initialization */
 	void Init(const FPointCloudVertexBuffer* VertexBuffer)
 	{
-		if(IsInRenderingThread())
+		if (IsInRenderingThread())
 		{
 			// Initialize the vertex factory's stream components.
 			FDataType NewData;
-			NewData.PositionComponent = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer,FDynamicMeshVertex,Position,VET_Float3);
+			NewData.PositionComponent = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer, FDynamicMeshVertex, Position, VET_Float3);
 			NewData.TextureCoordinates.Add(
-					FVertexStreamComponent(VertexBuffer,STRUCT_OFFSET(FDynamicMeshVertex,TextureCoordinate),sizeof(FDynamicMeshVertex),VET_Float2)
+				FVertexStreamComponent(VertexBuffer, STRUCT_OFFSET(FDynamicMeshVertex, TextureCoordinate), sizeof(FDynamicMeshVertex), VET_Float2)
 			);
-			NewData.TangentBasisComponents[0] = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer,FDynamicMeshVertex,TangentX,VET_PackedNormal);
-			NewData.TangentBasisComponents[1] = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer,FDynamicMeshVertex,TangentZ,VET_PackedNormal);
+			NewData.TangentBasisComponents[0] = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer, FDynamicMeshVertex, TangentX, VET_PackedNormal);
+			NewData.TangentBasisComponents[1] = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer, FDynamicMeshVertex, TangentZ, VET_PackedNormal);
 			SetData(NewData);
 		}
 		else
 		{
 			ENQUEUE_UNIQUE_RENDER_COMMAND_TWOPARAMETER(
-					InitPointCloudVertexFactory,
-					FPointCloudVertexFactory*,VertexFactory,this,
-			const FPointCloudVertexBuffer*,VertexBuffer,VertexBuffer,
-					{
-							// Initialize the vertex factory's stream components.
-							FDataType NewData;
-					NewData.PositionComponent = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer,FDynamicMeshVertex,Position,VET_Float3);
-					NewData.TextureCoordinates.Add(
-					FVertexStreamComponent(VertexBuffer,STRUCT_OFFSET(FDynamicMeshVertex,TextureCoordinate),sizeof(FDynamicMeshVertex),VET_Float2)
-					);
-					NewData.TangentBasisComponents[0] = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer,FDynamicMeshVertex,TangentX,VET_PackedNormal);
-					NewData.TangentBasisComponents[1] = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer,FDynamicMeshVertex,TangentZ,VET_PackedNormal);
-					VertexFactory->SetData(NewData);
-					});
+				InitPointCloudVertexFactory,
+				FPointCloudVertexFactory*, VertexFactory, this,
+				const FPointCloudVertexBuffer*, VertexBuffer, VertexBuffer,
+				{
+					// Initialize the vertex factory's stream components.
+					FDataType NewData;
+			NewData.PositionComponent = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer,FDynamicMeshVertex,Position,VET_Float3);
+			NewData.TextureCoordinates.Add(
+				FVertexStreamComponent(VertexBuffer,STRUCT_OFFSET(FDynamicMeshVertex,TextureCoordinate),sizeof(FDynamicMeshVertex),VET_Float2)
+			);
+			NewData.TangentBasisComponents[0] = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer,FDynamicMeshVertex,TangentX,VET_PackedNormal);
+			NewData.TangentBasisComponents[1] = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer,FDynamicMeshVertex,TangentZ,VET_PackedNormal);
+			VertexFactory->SetData(NewData);
+				});
 		}
 	}
 };
@@ -105,15 +109,16 @@ class FPointCloudSceneProxy : public FPrimitiveSceneProxy
 public:
 
 	FPointCloudSceneProxy(UPointCloudComponent* Component)
-			: FPrimitiveSceneProxy(Component)
-			, Material(NULL)
-			, DynamicData(NULL)
-			, MaterialRelevance(Component->GetMaterialRelevance(GetScene().GetFeatureLevel()))
-			, NumPoints(Component->NumPoints)
-			, PointCloudWidth(Component->PointCloudWidth)
-            , triangleSize(Component->triangleSize)
+		: FPrimitiveSceneProxy(Component)
+		, Material(NULL)
+		, DynamicData(NULL)
+		, MaterialRelevance(Component->GetMaterialRelevance(GetScene().GetFeatureLevel()))
+		, NumPoints(Component->NumPoints)
+		, PointCloudWidth(Component->PointCloudWidth)
+		, triangleSize(Component->triangleSize)
+		, VertexFactory(ERHIFeatureLevel::SM4)
 	{
-        mComponent = Component;
+		mComponent = Component;
 
 		VertexBuffer.NumVerts = GetRequiredVertexCount();
 		IndexBuffer.NumIndices = GetRequiredIndexCount();
@@ -128,7 +133,7 @@ public:
 
 		// Grab material
 		Material = Component->GetMaterial(0);
-		if(Material == NULL)
+		if (Material == NULL)
 		{
 			Material = UMaterial::GetDefaultMaterial(MD_Surface);
 		}
@@ -140,7 +145,7 @@ public:
 		IndexBuffer.ReleaseResource();
 		VertexFactory.ReleaseResource();
 
-		if(DynamicData != NULL)
+		if (DynamicData != NULL)
 		{
 			delete DynamicData;
 		}
@@ -156,81 +161,88 @@ public:
 		return GetRequiredVertexCount();
 	}
 
-    inline static TArray<FDynamicMeshVertex> triangle(const FVector& Point, const FColor& Color, const float triangleSize) {
-        float x = Point.X;
-        float y = Point.Y;
-        float z = Point.Z;
+	SIZE_T GetTypeHash() const override {
+		return 0;
+	}
 
-        // construct equilateral triangle with x, y, z as center and normal facing z
-        float a = triangleSize; // side lenght
-        float sqrt3 = FMath::Sqrt(3);
-        float r = sqrt3 / 6 * a; // radius of inscribed circle
-        float h_minus_r = a / sqrt3; // from center to tip. height - r
+	inline static TArray<FDynamicMeshVertex> triangle(const FVector& Point, const FColor& Color, const float triangleSize) {
+		float x = Point.X;
+		float y = Point.Y;
+		float z = Point.Z;
 
-        FDynamicMeshVertex v1;
-        v1.Position = FVector(x - a / 2.f, y - r, z+0);
-        v1.Color = Color;
-        v1.TextureCoordinate = FVector2D(- 1 / 2.f, - sqrt3 / 6);
-        FDynamicMeshVertex v2;
-        v2.Position = FVector(x + a / 2.f, y - r, z+1);
-        v2.Color = Color;
-        v2.TextureCoordinate = FVector2D(1 / 2.f, -sqrt3 / 6);
-        FDynamicMeshVertex v3;
-        v3.Position = FVector(x, y + a / sqrt3, z+2);
-        v3.Color = Color;
-        v3.TextureCoordinate = FVector2D(0, 1/sqrt3);
+		// construct equilateral triangle with x, y, z as center and normal facing z
+		float a = triangleSize; // side lenght
+		float sqrt3 = FMath::Sqrt(3);
+		float r = sqrt3 / 6 * a; // radius of inscribed circle
+		float h_minus_r = a / sqrt3; // from center to tip. height - r
 
-        // TODO: set for each vertex
-        //Vert.SetTangents(ForwardDir, OutDir ^ ForwardDir, OutDir);
+		FDynamicMeshVertex v1 = FDynamicMeshVertex(
+			FVector(x - a / 2.f, y - r, z + 0),
+			FVector2D(-1 / 2.f, -sqrt3 / 6),
+			Color);
 
-        auto normal = FVector::CrossProduct(v2.Position - v1.Position, v3.Position - v1.Position).GetSafeNormal();
+		FDynamicMeshVertex v2 = FDynamicMeshVertex(
+			FVector(x + a / 2.f, y - r, z + 1),
+			FVector2D(1 / 2.f, -sqrt3 / 6),
+			Color);
 
-
-        /*auto surfaceTangent = ((((v3.TextureCoordinate.X - v1.TextureCoordinate.X) / FVector2D::Distance(v3.TextureCoordinate, v1.TextureCoordinate))*(v3.Position - v1.Position)) +
-            (((v3.TextureCoordinate.Y - v1.TextureCoordinate.Y) / FVector2D::Distance(v3.TextureCoordinate, v1.TextureCoordinate))*FVector::CrossProduct(normal, (v3Position - v1.Position)))).GetSafeNormal();
+		FDynamicMeshVertex v3 = FDynamicMeshVertex(
+			FVector(x, y + a / sqrt3, z + 2),
+			FVector2D(0, 1 / sqrt3),
+			Color);
 
 
-        tangents->Add(FProcMeshTangent(surfaceTangent, true));
-        tangents->Add(FProcMeshTangent(surfaceTangent, true));
-        tangents->Add(FProcMeshTangent(surfaceTangent, true));*/
-        const FVector Edge01 = (v2.Position - v1.Position);
-        const FVector Edge02 = (v3.Position - v1.Position);
+		// TODO: set for each vertex
+		//Vert.SetTangents(ForwardDir, OutDir ^ ForwardDir, OutDir);
 
-        const FVector TangentX = Edge01.GetSafeNormal();
-        const FVector TangentZ = (Edge02 ^ Edge01).GetSafeNormal();
-        const FVector TangentY = (TangentX ^ TangentZ).GetSafeNormal();
-        v1.SetTangents(TangentX, TangentY, TangentZ);
-        v2.SetTangents(TangentX, TangentY, TangentZ);
-        v3.SetTangents(TangentX, TangentY, TangentZ);
-
-        TArray<FDynamicMeshVertex> vertices;
-        vertices.Add(v3);
-        vertices.Add(v2);
-        vertices.Add(v1);
-        return vertices;
-    }
+		auto normal = FVector::CrossProduct(v2.Position - v1.Position, v3.Position - v1.Position).GetSafeNormal();
 
 
-    void BuildPointCloudMesh(const TArray<FVector>& InPoints, TArray<FDynamicMeshVertex>& OutVertices, TArray<int32>& OutIndices)
+		/*auto surfaceTangent = ((((v3.TextureCoordinate.X - v1.TextureCoordinate.X) / FVector2D::Distance(v3.TextureCoordinate, v1.TextureCoordinate))*(v3.Position - v1.Position)) +
+		(((v3.TextureCoordinate.Y - v1.TextureCoordinate.Y) / FVector2D::Distance(v3.TextureCoordinate, v1.TextureCoordinate))*FVector::CrossProduct(normal, (v3Position - v1.Position)))).GetSafeNormal();
+
+
+		tangents->Add(FProcMeshTangent(surfaceTangent, true));
+		tangents->Add(FProcMeshTangent(surfaceTangent, true));
+		tangents->Add(FProcMeshTangent(surfaceTangent, true));*/
+		const FVector Edge01 = (v2.Position - v1.Position);
+		const FVector Edge02 = (v3.Position - v1.Position);
+
+		const FVector TangentX = Edge01.GetSafeNormal();
+		const FVector TangentZ = (Edge02 ^ Edge01).GetSafeNormal();
+		const FVector TangentY = (TangentX ^ TangentZ).GetSafeNormal();
+		v1.SetTangents(TangentX, TangentY, TangentZ);
+		v2.SetTangents(TangentX, TangentY, TangentZ);
+		v3.SetTangents(TangentX, TangentY, TangentZ);
+
+		TArray<FDynamicMeshVertex> vertices;
+		vertices.Add(v3);
+		vertices.Add(v2);
+		vertices.Add(v1);
+		return vertices;
+	}
+
+
+	void BuildPointCloudMesh(const TArray<FVector>& InPoints, TArray<FDynamicMeshVertex>& OutVertices, TArray<int32>& OutIndices)
 	{
-		const FColor VertexColor(255,255,255);
+		const FColor VertexColor(255, 255, 255);
 		const int32 NPoints = InPoints.Num();
-        check(NPoints == NumPoints);
+		check(NPoints == NumPoints);
 
-        //check(Component->NumPoints == NumPoints);
+		//check(Component->NumPoints == NumPoints);
 
 		// Build vertices
-        const FColor Color(255, 0,0);
+		const FColor Color(255, 0, 0);
 
-		for(int32 PointIdx=0; PointIdx<NPoints; PointIdx++)
+		for (int32 PointIdx = 0; PointIdx < NPoints; PointIdx++)
 		{
-            auto tri = triangle(InPoints[PointIdx], Color, triangleSize);
-            OutVertices.Add(tri[0]);
-            OutVertices.Add(tri[1]);
-            OutVertices.Add(tri[2]);
-            OutIndices.Add(PointIdx * 3 + 0);
-            OutIndices.Add(PointIdx * 3 + 1);
-            OutIndices.Add(PointIdx * 3 + 2);
+			auto tri = triangle(InPoints[PointIdx], Color, triangleSize);
+			OutVertices.Add(tri[0]);
+			OutVertices.Add(tri[1]);
+			OutVertices.Add(tri[2]);
+			OutIndices.Add(PointIdx * 3 + 0);
+			OutIndices.Add(PointIdx * 3 + 1);
+			OutIndices.Add(PointIdx * 3 + 2);
 		}
 	}
 
@@ -240,7 +252,7 @@ public:
 		check(IsInRenderingThread());
 
 		// Free existing data if present
-		if(DynamicData)
+		if (DynamicData)
 		{
 			delete DynamicData;
 			DynamicData = NULL;
@@ -266,19 +278,19 @@ public:
 
 	virtual void GetDynamicMeshElements(const TArray<const FSceneView*>& Views, const FSceneViewFamily& ViewFamily, uint32 VisibilityMap, FMeshElementCollector& Collector) const override
 	{
-		QUICK_SCOPE_CYCLE_COUNTER( STAT_PointCloudSceneProxy_GetDynamicMeshElements );
+		QUICK_SCOPE_CYCLE_COUNTER(STAT_PointCloudSceneProxy_GetDynamicMeshElements);
 
 		const bool bWireframe = AllowDebugViewmodes() && ViewFamily.EngineShowFlags.Wireframe;
 
 		auto WireframeMaterialInstance = new FColoredMaterialRenderProxy(
-				GEngine->WireframeMaterial ? GEngine->WireframeMaterial->GetRenderProxy(IsSelected()) : NULL,
-				FLinearColor(0, 0.5f, 1.f)
+			GEngine->WireframeMaterial ? GEngine->WireframeMaterial->GetRenderProxy(IsSelected()) : NULL,
+			FLinearColor(0, 0.5f, 1.f)
 		);
 
 		Collector.RegisterOneFrameMaterialProxy(WireframeMaterialInstance);
 
 		FMaterialRenderProxy* MaterialProxy = NULL;
-		if(bWireframe)
+		if (bWireframe)
 		{
 			MaterialProxy = WireframeMaterialInstance;
 		}
@@ -310,7 +322,7 @@ public:
 				Mesh.bCanApplyViewModeOverrides = false;
 				Collector.AddMesh(ViewIndex, Mesh);
 
-                RenderBounds(Collector.GetPDI(ViewIndex), ViewFamily.EngineShowFlags, GetBounds(), IsSelected());
+				RenderBounds(Collector.GetPDI(ViewIndex), ViewFamily.EngineShowFlags, GetBounds(), IsSelected());
 #if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
 				// Render bounds
 				RenderBounds(Collector.GetPDI(ViewIndex), ViewFamily.EngineShowFlags, GetBounds(), IsSelected());
@@ -329,13 +341,13 @@ public:
 		return Result;
 	}
 
-	virtual uint32 GetMemoryFootprint( void ) const override { return( sizeof( *this ) + GetAllocatedSize() ); }
+	virtual uint32 GetMemoryFootprint(void) const override { return(sizeof(*this) + GetAllocatedSize()); }
 
-	uint32 GetAllocatedSize( void ) const { return( FPrimitiveSceneProxy::GetAllocatedSize() ); }
+	uint32 GetAllocatedSize(void) const { return(FPrimitiveSceneProxy::GetAllocatedSize()); }
 
 private:
 
-	UMaterialInterface* Material;
+	UMaterialInterface * Material;
 	FPointCloudVertexBuffer VertexBuffer;
 	FPointCloudIndexBuffer IndexBuffer;
 	FPointCloudVertexFactory VertexFactory;
@@ -348,38 +360,38 @@ private:
 	int32 NumPoints;
 	int32 NumSides;
 	float PointCloudWidth;
-    float triangleSize;
+	float triangleSize;
 
-    UPointCloudComponent* mComponent;
+	UPointCloudComponent* mComponent;
 };
 
 
 
 //////////////////////////////////////////////////////////////////////////
 
-UPointCloudComponent::UPointCloudComponent( const FObjectInitializer& ObjectInitializer )
-		: Super( ObjectInitializer )
+UPointCloudComponent::UPointCloudComponent(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	bTickInEditor = true;
 	bAutoActivate = true;
-    bWantsInitializeComponent = true;
+	bWantsInitializeComponent = true;
 
-    //bEnableAutoLODGeneration = false;
+	//bEnableAutoLODGeneration = false;
 
 	PointCloudWidth = 10.f;
 	//NumPoints = 512*512;
-    triangleSize = 5.f;
+	triangleSize = 5.f;
 
-    //SetCollisionProfileName(UCollisionProfile::PhysicsActor_ProfileName);
-    SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
-    SetSimulatePhysics(false);
+	//SetCollisionProfileName(UCollisionProfile::PhysicsActor_ProfileName);
+	SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+	SetSimulatePhysics(false);
 }
 
 FPrimitiveSceneProxy* UPointCloudComponent::CreateSceneProxy()
 {
-    auto sceneProxy = new FPointCloudSceneProxy(this);
-    //UE_LOG(LogTemp, Warning, TEXT("created SceneProxy: %d"), sceneProxy);
+	auto sceneProxy = new FPointCloudSceneProxy(this);
+	//UE_LOG(LogTemp, Warning, TEXT("created SceneProxy: %d"), sceneProxy);
 	return sceneProxy;
 }
 
@@ -401,31 +413,31 @@ void UPointCloudComponent::GetUsedMaterials(TArray<UMaterialInterface*>& OutMate
 
 void UPointCloudComponent::InitializeComponent()
 {
-    Super::InitializeComponent();
-    //setNumPoints(NumPoints);
+	Super::InitializeComponent();
+	//setNumPoints(NumPoints);
 }
 
 void UPointCloudComponent::OnRegister()
 {
 	Super::OnRegister();
-    setNumPoints(NumPoints);
+	setNumPoints(NumPoints);
 }
 
 void UPointCloudComponent::setNumPoints(int numPoints) {
-    NumPoints = numPoints;
+	NumPoints = numPoints;
 
-    //UE_LOG(LogTemp, Warning, TEXT("mySceneProxy: %d"), SceneProxy);
+	//UE_LOG(LogTemp, Warning, TEXT("mySceneProxy: %d"), SceneProxy);
 
-    Points.Reset();
-    Points.AddUninitialized(NumPoints);
+	Points.Reset();
+	Points.AddUninitialized(NumPoints);
 
-    for (int32 ParticleIdx = 0; ParticleIdx<NumPoints; ParticleIdx++)
-    {
-        FPointCloudParticle& Particle = Points[ParticleIdx];
-        const FVector InitialPosition = FVector(0, 0, ParticleIdx * 3);
+	for (int32 ParticleIdx = 0; ParticleIdx < NumPoints; ParticleIdx++)
+	{
+		FPointCloudParticle& Particle = Points[ParticleIdx];
+		const FVector InitialPosition = FVector(0, 0, ParticleIdx * 3);
 
-        Particle.Position = InitialPosition;
-    }
+		Particle.Position = InitialPosition;
+	}
 }
 
 
@@ -443,7 +455,7 @@ void UPointCloudComponent::CreateRenderState_Concurrent()
 
 void UPointCloudComponent::SendRenderDynamicData_Concurrent()
 {
-	if(SceneProxy)
+	if (SceneProxy)
 	{
 		// Allocate PointCloud dynamic data
 		FPointCloudDynamicData* DynamicData = new FPointCloudDynamicData;
@@ -451,21 +463,21 @@ void UPointCloudComponent::SendRenderDynamicData_Concurrent()
 		// Transform current positions from particles into component-space array
 		const FTransform& ComponentTransform = GetComponentTransform();
 		DynamicData->PointCloudPoints.AddUninitialized(NumPoints);
-        // TODO can we use memcopy or use only one buffer here?
-		for(int32 PointIdx=0; PointIdx<NumPoints; PointIdx++)
+		// TODO can we use memcopy or use only one buffer here?
+		for (int32 PointIdx = 0; PointIdx < NumPoints; PointIdx++)
 		{
-            //DynamicData->PointCloudPoints[PointIdx] = ComponentTransform.InverseTransformPosition(Points[PointIdx].Position);
-            DynamicData->PointCloudPoints[PointIdx] = Points[PointIdx].Position;
+			//DynamicData->PointCloudPoints[PointIdx] = ComponentTransform.InverseTransformPosition(Points[PointIdx].Position);
+			DynamicData->PointCloudPoints[PointIdx] = Points[PointIdx].Position;
 		}
 
 		// Enqueue command to send to render thread
 		ENQUEUE_UNIQUE_RENDER_COMMAND_TWOPARAMETER(
-				FSendPointCloudDynamicData,
-				FPointCloudSceneProxy*,PointCloudSceneProxy,(FPointCloudSceneProxy*)SceneProxy,
-				FPointCloudDynamicData*,DynamicData,DynamicData,
-				{
-						PointCloudSceneProxy->SetDynamicData_RenderThread(DynamicData);
-				});
+			FSendPointCloudDynamicData,
+			FPointCloudSceneProxy*, PointCloudSceneProxy, (FPointCloudSceneProxy*)SceneProxy,
+			FPointCloudDynamicData*, DynamicData, DynamicData,
+			{
+				PointCloudSceneProxy->SetDynamicData_RenderThread(DynamicData);
+			});
 	}
 }
 
@@ -473,23 +485,23 @@ FBoxSphereBounds UPointCloudComponent::CalcBounds(const FTransform& LocalToWorld
 {
 	//#ToDo
 
-//	// Calculate bounding box of PointCloud points
-//	FBox PointCloudBox(ForceInit);
-//	for(int32 ParticleIdx=0; ParticleIdx<Points.Num(); ParticleIdx++)
-//	{
-//		const FPointCloudParticle& Particle = Points[ParticleIdx];
-//		PointCloudBox += Particle.Position;
-//	}
-//
-//	// Expand by PointCloud radius (half PointCloud width)
-//	return FBoxSphereBounds(PointCloudBox.ExpandBy(0.5f * PointCloudWidth));
+	//	// Calculate bounding box of PointCloud points
+	//	FBox PointCloudBox(ForceInit);
+	//	for(int32 ParticleIdx=0; ParticleIdx<Points.Num(); ParticleIdx++)
+	//	{
+	//		const FPointCloudParticle& Particle = Points[ParticleIdx];
+	//		PointCloudBox += Particle.Position;
+	//	}
+	//
+	//	// Expand by PointCloud radius (half PointCloud width)
+	//	return FBoxSphereBounds(PointCloudBox.ExpandBy(0.5f * PointCloudWidth));
 
-    int32 EdgeSize = INT_MAX;
-    FVector cube(EdgeSize, EdgeSize, EdgeSize);
+	int32 EdgeSize = INT_MAX;
+	FVector cube(EdgeSize, EdgeSize, EdgeSize);
 
-    FBoxSphereBounds NewBounds;
-    NewBounds.Origin = LocalToWorld.GetLocation() + cube / 2;
-    NewBounds.BoxExtent = cube;
-    NewBounds.SphereRadius = FGenericPlatformMath::Sqrt(3 * EdgeSize);
-    return NewBounds;
+	FBoxSphereBounds NewBounds;
+	NewBounds.Origin = LocalToWorld.GetLocation() + cube / 2;
+	NewBounds.BoxExtent = cube;
+	NewBounds.SphereRadius = FGenericPlatformMath::Sqrt(3 * EdgeSize);
+	return NewBounds;
 }
