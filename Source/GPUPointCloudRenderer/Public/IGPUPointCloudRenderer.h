@@ -8,6 +8,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Modules/ModuleInterface.h"
 #include "Modules/ModuleManager.h"
+#include "PointCloudStreamingCore.h"
 
 /**
  * The public interface to the Point Cloud Renderer module.
