@@ -2,10 +2,12 @@
 * Written by Valentin Kraft <valentin.kraft@online.de>, http://www.valentinkraft.de, 2018
 **************************************************************************************************/
 
+#pragma once
+
 #include "IGPUPointCloudRenderer.h"
-#include "CoreMinimal.h"
 #include "PointCloudStreamingCore.h"
-#include "Modules/ModuleManager.h"
+//#include "Modules/ModuleManager.h"
+
 
 class FGPUPointCloudRendererPlugin : public IGPUPointCloudRenderer
 {
